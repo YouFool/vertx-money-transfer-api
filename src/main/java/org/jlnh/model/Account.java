@@ -1,11 +1,15 @@
 package org.jlnh.model;
 
+import io.vertx.core.json.JsonObject;
+
 import java.math.BigDecimal;
 import java.util.Objects;
 import java.util.UUID;
 
 /**
+ * Represents a Bank account.
  *
+ * @author João Heckmann
  */
 public class Account {
 
@@ -19,6 +23,14 @@ public class Account {
         this.id = id;
         this.balance = balance;
     }
+
+    public Account(JsonObject payload) {
+        this(
+                UUID.fromString(payload.getString("ID")),
+                BigDecimal.valueOf(payload.getDouble("BALANCE"))
+        );
+    }
+
 
     public UUID getId() {
         return id;

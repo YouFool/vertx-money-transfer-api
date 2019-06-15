@@ -3,6 +3,7 @@ package org.jlnh;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.jdbc.JDBCClient;
 import io.vertx.ext.sql.SQLConnection;
 import io.vertx.ext.sql.SQLOptions;
@@ -11,9 +12,20 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jlnh.model.Account;
 import org.jlnh.model.Transaction;
 import org.jlnh.service.TransactionService;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static org.jlnh.ActionHelper.ok;
+
+/**
+ * Verticle responsible for the money transfer API.
+ *
+ * @author João Heckmann
+ */
 public class MoneyTransferVerticle extends AbstractVerticle {
 
     private JDBCClient jdbcClient;
@@ -24,22 +36,21 @@ public class MoneyTransferVerticle extends AbstractVerticle {
 
 
     @Override
-    public void start() {
-        this.createHttpServer();
-    }
-
-    private void createHttpServer() {
+    public void start(Future<Void> startFuture) {
         Router router = Router.router(vertx);
         router.route().handler(BodyHandler.create());
 
         router.post("/api/transfer").handler(this::transferMoney);
+
+        router.get("/api/accounts").handler(this::getAllAccounts);
+        //router.get("/api/transfer/:id").handler(this::getOne);
 
         ConfigRetriever configRetriever = ConfigRetriever.create(vertx);
         ConfigRetriever.getConfigAsFuture(configRetriever)
                 .compose(config -> {
                     jdbcClient = JDBCClient.createShared(vertx, config, "test");
 
-                    return connect(jdbcClient) //
+                    return connect() //
                             .compose(sqlConnection -> { //
                                 Future<Void> future = Future.future();
                                 createTablesIfNeeded(sqlConnection) //
@@ -47,17 +58,30 @@ public class MoneyTransferVerticle extends AbstractVerticle {
                                             sqlConnection.close();
                                             future.handle(event.mapEmpty());
                                         });
-                            return null; //TODO complete
-                            });
-                });
-
-        //router.get("/api/transfer").handler(this::getAll);
-        //router.get("/api/transfer/:id").handler(this::getOne);
-
-        vertx.createHttpServer().requestHandler(router).listen(8080);
+                                return future;
+                            }).compose(v -> createHttpServer(config, router));
+                }).setHandler(startFuture);
     }
 
-    public Future<SQLConnection> connect(JDBCClient jdbcClient) {
+    /**
+     *
+     * @param config
+     * @param router
+     * @return
+     */
+    private Future<Void> createHttpServer(JsonObject config, Router router) {
+        Future<Void> future = Future.future();
+        vertx.createHttpServer() //
+            .requestHandler(router) //
+                .listen(config.getInteger("HTTP_PORT", 8080), res -> future.handle(res.mapEmpty()));
+        return future;
+    }
+
+    /**
+     *
+     * @return
+     */
+    public Future<SQLConnection> connect() {
         Future<SQLConnection> future = Future.future();
         jdbcClient.getConnection(asyncResult -> //
                 future.handle(asyncResult.map(connection -> //
@@ -72,7 +96,7 @@ public class MoneyTransferVerticle extends AbstractVerticle {
      */
     private Future<SQLConnection> createTablesIfNeeded(SQLConnection connection) {
         Future<SQLConnection> future = Future.future();
-        vertx.fileSystem().readFile("V__01_Create.sql", ar -> {
+        vertx.fileSystem().readFile("scripts/V__01_Create.sql", ar -> {
             if (ar.failed()) {
                 future.fail(ar.cause());
             } else {
@@ -84,6 +108,10 @@ public class MoneyTransferVerticle extends AbstractVerticle {
         return future;
     }
 
+    /**
+     *
+     * @param routingContext
+     */
     private void transferMoney(RoutingContext routingContext) {
         Transaction theTransaction = routingContext.getBodyAsJson().mapTo(Transaction.class);
         LOGGER.error(theTransaction.toString());
@@ -96,12 +124,30 @@ public class MoneyTransferVerticle extends AbstractVerticle {
                 .end("Transaction done!");
     }
 
-    /*Review when whe have a db
-    private void getAll(RoutingContext routingContext) {
-        routingContext.response() //
-                .setStatusCode(200) //
-                .putHeader("content-type", "application/json; charset=utf-8") //
-                .end(Json.encodePrettily(transactions));
-    }
+    /**
+     *
+     * @param routingContext
      */
+    private void getAllAccounts(RoutingContext routingContext) {
+        connect()
+                .compose(this::fetchAllAccounts) //
+                .setHandler(ok(routingContext));
+    }
+
+    /**
+     *
+     * @param connection
+     * @return
+     */
+    private Future<List<Account>> fetchAllAccounts(SQLConnection connection) {
+        Future<List<Account>> future = Future.future();
+        connection.query("SELECT * FROM account", result -> {
+                    connection.close();
+                     future.handle(
+                            result.map(rs -> rs.getRows().stream(  ).map(Account::new).collect(Collectors.toList()))
+                    );
+                }
+        );
+        return future;
+    }
 }

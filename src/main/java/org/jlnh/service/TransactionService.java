@@ -7,13 +7,13 @@ import org.jlnh.model.Account;
 import java.math.BigDecimal;
 
 /**
- *
+ * Service responsible to manage transactions between accounts.
  */
 public class TransactionService {
 
     private static final Logger LOGGER = LogManager.getLogger(TransactionService.class);
 
-    public void transferMoney(Account sender, Account receiver, BigDecimal amount) {
+    public void transferMoney(Account sender, Account receiver, BigDecimal amount) { //TODO return a future
         // TODO query the DB to see if the users exist
 
         LOGGER.error("Transferring: ".concat(amount.toString()));

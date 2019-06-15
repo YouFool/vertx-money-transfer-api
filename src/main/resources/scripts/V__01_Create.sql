@@ -25,3 +25,4 @@ create table transaction
 
 INSERT INTO account VALUES ( 'e6908ec0-1b70-4982-9362-8e9bdabbbd97', 10000.00);
 INSERT INTO account VALUES ( 'f4e05ee5-12eb-4ae0-92c7-2cb4b6cd8ce2', 9.99);
+INSERT INTO account VALUES ( '123e4567-e89b-12d3-a456-556642440000', 0.00);

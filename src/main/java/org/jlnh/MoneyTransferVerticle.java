@@ -3,6 +3,7 @@ package org.jlnh;
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.jdbc.JDBCClient;
 import io.vertx.ext.sql.SQLConnection;
@@ -14,11 +15,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jlnh.model.Account;
 import org.jlnh.model.Transaction;
-import org.jlnh.service.TransactionService;
 
+import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static org.jlnh.ActionHelper.created;
 import static org.jlnh.ActionHelper.ok;
 
 /**
@@ -30,8 +33,6 @@ public class MoneyTransferVerticle extends AbstractVerticle {
 
     private JDBCClient jdbcClient;
 
-    private TransactionService transactionService = new TransactionService();
-
     private static final Logger LOGGER = LogManager.getLogger(MoneyTransferVerticle.class);
 
 
@@ -40,10 +41,11 @@ public class MoneyTransferVerticle extends AbstractVerticle {
         Router router = Router.router(vertx);
         router.route().handler(BodyHandler.create());
 
-        router.post("/api/transfer").handler(this::transferMoney);
+//        router.post("/api/transfer").handler(this::transferMoney);
+        router.post("/api/transfer").handler(this::transfer);
 
         router.get("/api/accounts").handler(this::getAllAccounts);
-        //router.get("/api/transfer/:id").handler(this::getOne);
+        router.get("/api/accounts/:id").handler(this::getOneAccount);
 
         ConfigRetriever configRetriever = ConfigRetriever.create(vertx);
         ConfigRetriever.getConfigAsFuture(configRetriever)
@@ -112,16 +114,43 @@ public class MoneyTransferVerticle extends AbstractVerticle {
      *
      * @param routingContext
      */
-    private void transferMoney(RoutingContext routingContext) {
+    private void transfer(RoutingContext routingContext) {
         Transaction theTransaction = routingContext.getBodyAsJson().mapTo(Transaction.class);
-        LOGGER.error(theTransaction.toString());
+        LOGGER.error("Transaction incoming: ".concat(theTransaction.toString()));
 
-        transactionService.transferMoney(theTransaction.getFrom(), theTransaction.getTo(), theTransaction.getAmount());
+        connect() //
+                .compose(sqlConnection -> this.doTransfer(sqlConnection, theTransaction))
+                .setHandler(created(routingContext));
+    }
 
-        routingContext.response() //
-                .setStatusCode(201) //
-                .putHeader("content-type", "application/json; charset=utf-8") //
-                .end("Transaction done!");
+    /**
+     *
+     * @param sqlConnection
+     * @param theTransaction
+     * @return
+     */
+    private Future<Transaction> doTransfer(SQLConnection sqlConnection, Transaction theTransaction) {
+        Future<Transaction> transactionFuture = Future.future();
+
+        this.fetchOne(sqlConnection, theTransaction.getFrom().getId().toString(), false)
+                .compose(fromAccount -> {
+                    Future<Account> accountFuture = Future.future();
+
+                    this.fetchOne(sqlConnection, theTransaction.getTo().getId().toString(), false)
+                            .compose(toAccount -> {
+                                this.transferMoney(sqlConnection, fromAccount, toAccount, theTransaction.getAmount())
+                                        .setHandler(event -> {
+                                            if (event.failed()) {
+                                                transactionFuture.fail("Could not transfer money!");
+                                            }
+                                            transactionFuture.complete();
+                                        });
+                            return transactionFuture;
+                            });
+                    return accountFuture;
+                });
+
+        return transactionFuture;
     }
 
     /**
@@ -150,4 +179,78 @@ public class MoneyTransferVerticle extends AbstractVerticle {
         );
         return future;
     }
+
+    /**
+     *
+     * @param routingContext
+     */
+    private void getOneAccount(RoutingContext routingContext) {
+        String id = routingContext.pathParam("id");
+        connect() //
+                .compose(sqlConnection -> this.fetchOne(sqlConnection, id, true)) //
+                .setHandler(ok(routingContext));
+    }
+
+    /**
+     *
+     * @param sqlConnection
+     * @param id
+     * @return
+     */
+    private Future<Account> fetchOne(SQLConnection sqlConnection, String id, boolean closeConnection) {
+        Future<Account> future = Future.future();
+        String sql = "SELECT * FROM account WHERE id = ?";
+        sqlConnection.queryWithParams(sql, new JsonArray().add(id), result -> {
+            if (closeConnection) {
+                sqlConnection.close();
+            }
+            future.handle(result.map(
+                    resultSet -> new Account(resultSet.getRows().get(0)))
+            );
+        });
+
+        return future;
+    }
+
+    /**
+     *
+     * @param sqlConnection
+     * @param sender
+     * @param receiver
+     * @param amount
+     */
+    public Future<Transaction> transferMoney(SQLConnection sqlConnection, Account sender, Account receiver, BigDecimal amount) {
+        Future<Transaction> future = Future.future();
+
+        LOGGER.error("Transferring: ".concat(amount.toString()));
+        LOGGER.error("From: ".concat(sender.toString()));
+        LOGGER.error("To: ".concat(receiver.toString()));
+
+        BigDecimal senderBalance = sender.getBalance();
+        if (senderBalance.compareTo(amount) < 0) {
+            LOGGER.error("Sender: ".concat(sender.toString()).concat(" is bankrupt!"));
+            future.fail(new IllegalStateException("Sender: ".concat(sender.toString()).concat(" is bankrupt!")));
+        } else {
+            JsonArray params = new JsonArray()
+                    .add(UUID.randomUUID().toString())
+                    .add(sender.getId().toString())
+                    .add(receiver.getId().toString())
+                    .add(amount.doubleValue());
+            sqlConnection.updateWithParams("INSERT INTO transaction VALUES(?, ?, ?, ?)", params, ar -> {
+                sender.setBalance(senderBalance.subtract(amount));
+                JsonArray params2 = new JsonArray().add(sender.getBalance().doubleValue()).add(sender.getId().toString());
+                sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", params2, event ->  {
+
+                    receiver.setBalance(receiver.getBalance().add(amount));
+                    JsonArray params3 = new JsonArray().add(receiver.getBalance().doubleValue()).add(receiver.getId().toString());
+                    sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", params3, event2 -> {
+                        //sqlConnection.close();
+                    });
+                });
+            });
+            future.complete();
+        }
+        return future;
+    }
+
 }

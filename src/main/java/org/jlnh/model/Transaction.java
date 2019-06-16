@@ -30,10 +30,10 @@ public class Transaction {
 
     public Transaction(JsonObject payload) {
         this(
-                (UUID) payload.getValue("id", UUID.class), //
-                (Account) payload.getValue("from", Account.class), //
-                (Account) payload.getValue("to", Account.class), //
-                BigDecimal.valueOf(payload.getDouble("amount"))
+                (UUID) payload.getValue("ID", UUID.class), //
+                (Account) payload.getValue("FROM", Account.class), //
+                (Account) payload.getValue("TO", Account.class), //
+                BigDecimal.valueOf(payload.getDouble("AMOUNT"))
         );
     }
 

@@ -4,6 +4,7 @@ import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.json.Json;
 import io.vertx.ext.web.RoutingContext;
+import org.jlnh.model.Transaction;
 
 import java.util.NoSuchElementException;
 
@@ -54,6 +55,20 @@ public class ActionHelper {
             } else {
                 rc.response().setStatusCode(204).end();
             }
+        };
+    }
+
+    public static Handler<AsyncResult<Transaction>> handleTransfer(RoutingContext routingContext, Transaction transaction) {
+        return ar -> {
+            if (ar.failed()) {
+                if (ar.cause() instanceof IllegalStateException) {
+                    routingContext.response().setStatusCode(404).end("Could not transfer: user does not have sufficient funds");
+                } else {
+                    routingContext.fail(ar.cause());
+                }
+            }
+            transaction.setTo(null); // who transferred the money does not need to know his friend balance
+            routingContext.response().setStatusCode(201).end(Json.encodePrettily(transaction));
         };
     }
 }

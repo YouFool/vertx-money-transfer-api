@@ -21,7 +21,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static org.jlnh.ActionHelper.created;
 import static org.jlnh.ActionHelper.ok;
 
 /**
@@ -120,7 +119,7 @@ public class MoneyTransferVerticle extends AbstractVerticle {
 
         connect() //
                 .compose(sqlConnection -> this.doTransfer(sqlConnection, theTransaction))
-                .setHandler(created(routingContext));
+                .setHandler(ActionHelper.handleTransfer(routingContext, theTransaction));
     }
 
     /**

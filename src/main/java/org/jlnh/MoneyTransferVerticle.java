@@ -2,6 +2,7 @@ package org.jlnh;
 
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -21,7 +22,8 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static org.jlnh.ActionHelper.ok;
+import static org.jlnh.util.ActionHelper.handleTransfer;
+import static org.jlnh.util.ActionHelper.ok;
 
 /**
  * Verticle responsible for the money transfer API.
@@ -40,7 +42,6 @@ public class MoneyTransferVerticle extends AbstractVerticle {
         Router router = Router.router(vertx);
         router.route().handler(BodyHandler.create());
 
-//        router.post("/api/transfer").handler(this::transferMoney);
         router.post("/api/transfer").handler(this::transfer);
 
         router.get("/api/accounts").handler(this::getAllAccounts);
@@ -119,7 +120,7 @@ public class MoneyTransferVerticle extends AbstractVerticle {
 
         connect() //
                 .compose(sqlConnection -> this.doTransfer(sqlConnection, theTransaction))
-                .setHandler(ActionHelper.handleTransfer(routingContext, theTransaction));
+                .setHandler(handleTransfer(routingContext, theTransaction));
     }
 
     /**
@@ -242,9 +243,7 @@ public class MoneyTransferVerticle extends AbstractVerticle {
 
                     receiver.setBalance(receiver.getBalance().add(amount));
                     JsonArray params3 = new JsonArray().add(receiver.getBalance().doubleValue()).add(receiver.getId().toString());
-                    sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", params3, event2 -> {
-                        //sqlConnection.close();
-                    });
+                    sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", params3, AsyncResult::mapEmpty);
                 });
             });
             future.complete();

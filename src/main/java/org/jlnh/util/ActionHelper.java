@@ -1,4 +1,4 @@
-package org.jlnh;
+package org.jlnh.util;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import io.vertx.core.AsyncResult;
@@ -27,7 +27,7 @@ public class ActionHelper {
      * @param context the routing context
      * @return the handler
      */
-    static <T> Handler<AsyncResult<T>> ok(RoutingContext context) {
+    public static <T> Handler<AsyncResult<T>> ok(RoutingContext context) {
         return ar -> {
             if (ar.failed()) {
                 if (ar.cause() instanceof NoSuchElementException) {
@@ -52,7 +52,7 @@ public class ActionHelper {
      * @param transaction the transaction
      * @return the handler
      */
-    static Handler<AsyncResult<Transaction>> handleTransfer(RoutingContext context, Transaction transaction) {
+    public static Handler<AsyncResult<Transaction>> handleTransfer(RoutingContext context, Transaction transaction) {
         return ar -> {
             if (ar.failed()) {
                 JsonObject failureJson = new JsonObject() //

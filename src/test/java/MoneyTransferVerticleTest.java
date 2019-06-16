@@ -115,7 +115,7 @@ public class MoneyTransferVerticleTest {
                     context.assertEquals(response.statusCode(), 400);
                     context.assertTrue(response.headers().get("content-type").contains("application/json"));
                     response.bodyHandler(body -> {
-                        context.assertTrue(body.toString().contains("Could not transfer money!"));
+                        context.assertTrue(body.toString().contains("User does not have sufficient funds"));
                         async.complete();
                     });
                 })

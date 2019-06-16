@@ -45,7 +45,7 @@ public class MoneyTransferVerticle extends AbstractVerticle {
         router.post("/api/transfer").handler(this::transfer);
 
         router.get("/api/accounts").handler(this::getAllAccounts);
-        router.get("/api/accounts/:id").handler(this::getOneAccount);
+        router.get("/api/accounts/:id").handler(this::getAccount);
 
         ConfigRetriever configRetriever = ConfigRetriever.create(vertx);
         ConfigRetriever.getConfigAsFuture(configRetriever)
@@ -66,10 +66,11 @@ public class MoneyTransferVerticle extends AbstractVerticle {
     }
 
     /**
+     * Reads the config file and starts the HTTP server asynchronously.
      *
-     * @param config
-     * @param router
-     * @return
+     * @param config {@link JsonObject} with the application configuration
+     * @param router {@link Router} the server router
+     * @return Future empty result
      */
     private Future<Void> createHttpServer(JsonObject config, Router router) {
         Future<Void> future = Future.future();
@@ -80,10 +81,11 @@ public class MoneyTransferVerticle extends AbstractVerticle {
     }
 
     /**
+     * Fetches a database connection asynchronously.
      *
-     * @return
+     * @return a future {@link SQLConnection} connection
      */
-    public Future<SQLConnection> connect() {
+    private Future<SQLConnection> connect() {
         Future<SQLConnection> future = Future.future();
         jdbcClient.getConnection(asyncResult -> //
                 future.handle(asyncResult.map(connection -> //
@@ -92,18 +94,19 @@ public class MoneyTransferVerticle extends AbstractVerticle {
     }
 
     /**
+     * Creates the database tables and accounts.
      *
-     * @param connection
-     * @return
+     * @param connection {@link SQLConnection} database connection
+     * @return the connection itself
      */
     private Future<SQLConnection> createTablesIfNeeded(SQLConnection connection) {
         Future<SQLConnection> future = Future.future();
-        vertx.fileSystem().readFile("scripts/V__01_Create.sql", ar -> {
-            if (ar.failed()) {
-                future.fail(ar.cause());
+        vertx.fileSystem().readFile("scripts/V__01_Create.sql", readFile -> {
+            if (readFile.failed()) {
+                future.fail(readFile.cause());
             } else {
-                connection.execute(ar.result().toString(),
-                        ar2 -> future.handle(ar2.map(connection))
+                connection.execute(readFile.result().toString(), //
+                        executeStatement -> future.handle(executeStatement.map(connection))
                 );
             }
         });
@@ -111,12 +114,13 @@ public class MoneyTransferVerticle extends AbstractVerticle {
     }
 
     /**
+     * Transfer money between two accounts with a given {@link Transaction} input.
      *
-     * @param routingContext
+     * @param routingContext request context
      */
     private void transfer(RoutingContext routingContext) {
         Transaction theTransaction = routingContext.getBodyAsJson().mapTo(Transaction.class);
-        LOGGER.error("Transaction incoming: ".concat(theTransaction.toString()));
+        LOGGER.info("Transaction incoming: ".concat(theTransaction.toString()));
 
         connect() //
                 .compose(sqlConnection -> this.doTransfer(sqlConnection, theTransaction))
@@ -124,56 +128,63 @@ public class MoneyTransferVerticle extends AbstractVerticle {
     }
 
     /**
+     * With the given {@link Transaction} input, finds the two accounts balance and executes the transfer.
      *
-     * @param sqlConnection
-     * @param theTransaction
-     * @return
+     * @param sqlConnection the database connection
+     * @param theTransaction transaction to be executed
+     * @return future transaction which might be completed or refused
      */
     private Future<Transaction> doTransfer(SQLConnection sqlConnection, Transaction theTransaction) {
         Future<Transaction> transactionFuture = Future.future();
 
-        this.fetchOne(sqlConnection, theTransaction.getFrom().getId().toString(), false)
+        this.findAccount(theTransaction.getFrom().getId().toString(), sqlConnection, false)
                 .compose(fromAccount -> {
-                    Future<Account> accountFuture = Future.future();
+                    Future<Account> toAccountFuture = Future.future();
 
-                    this.fetchOne(sqlConnection, theTransaction.getTo().getId().toString(), false)
+                    this.findAccount(theTransaction.getTo().getId().toString(), sqlConnection, false)
                             .compose(toAccount -> {
-                                this.transferMoney(sqlConnection, fromAccount, toAccount, theTransaction.getAmount())
+                                this.transferMoney(fromAccount, toAccount, theTransaction.getAmount(), sqlConnection)
                                         .setHandler(event -> {
                                             if (event.failed()) {
-                                                transactionFuture.fail(new IllegalStateException("Could not transfer money!"));
+                                                transactionFuture.fail(event.cause());
+                                            } else {
+                                                transactionFuture.complete(event.result());
                                             }
-                                            transactionFuture.complete();
                                         });
                             return transactionFuture;
                             });
-                    return accountFuture;
+                    return toAccountFuture.mapEmpty();
                 });
 
         return transactionFuture;
     }
 
     /**
+     * Get all accounts.
      *
-     * @param routingContext
+     * @param routingContext request context
      */
     private void getAllAccounts(RoutingContext routingContext) {
         connect()
-                .compose(this::fetchAllAccounts) //
+                .compose(this::findAllAccounts) //
                 .setHandler(ok(routingContext));
     }
 
     /**
+     * Finds all accounts and maps the {@link io.vertx.ext.sql.ResultSet ResultSet} into {@link Account accounts}.
      *
-     * @param connection
-     * @return
+     * @param connection database connection
+     * @return all the accounts
      */
-    private Future<List<Account>> fetchAllAccounts(SQLConnection connection) {
+    private Future<List<Account>> findAllAccounts(SQLConnection connection) {
         Future<List<Account>> future = Future.future();
         connection.query("SELECT * FROM account", result -> {
                     connection.close();
-                     future.handle(
-                            result.map(rs -> rs.getRows().stream(  ).map(Account::new).collect(Collectors.toList()))
+                    future.handle(
+                            result.map(resultSet -> resultSet.getRows()
+                                    .stream()
+                                    .map(Account::new)
+                                    .collect(Collectors.toList()))
                     );
                 }
         );
@@ -181,23 +192,26 @@ public class MoneyTransferVerticle extends AbstractVerticle {
     }
 
     /**
+     * Get a single account by the account {@link UUID id}.
      *
-     * @param routingContext
+     * @param routingContext request context
      */
-    private void getOneAccount(RoutingContext routingContext) {
+    private void getAccount(RoutingContext routingContext) {
         String id = routingContext.pathParam("id");
         connect() //
-                .compose(sqlConnection -> this.fetchOne(sqlConnection, id, true)) //
+                .compose(sqlConnection -> this.findAccount(id, sqlConnection, true)) //
                 .setHandler(ok(routingContext));
     }
 
     /**
+     * Finds a single account by it's {@link UUID id} and maps the result into a {@link Account account}.
      *
-     * @param sqlConnection
-     * @param id
-     * @return
+     * @param sqlConnection database connection
+     * @param id account id
+     * @param closeConnection close or not database connection
+     * @return the account found
      */
-    private Future<Account> fetchOne(SQLConnection sqlConnection, String id, boolean closeConnection) {
+    private Future<Account> findAccount(String id, SQLConnection sqlConnection, boolean closeConnection) {
         Future<Account> future = Future.future();
         String sql = "SELECT * FROM account WHERE id = ?";
         sqlConnection.queryWithParams(sql, new JsonArray().add(id), result -> {
@@ -213,30 +227,32 @@ public class MoneyTransferVerticle extends AbstractVerticle {
     }
 
     /**
+     * Transfers a given amount from the sender account to the receiver account.
      *
-     * @param sqlConnection
-     * @param sender
-     * @param receiver
-     * @param amount
+     * @param sender account that is sending the amount
+     * @param receiver account that is receiving the amount
+     * @param amount the amount itself
+     * @param sqlConnection database connection
+     * @throws IllegalStateException if the amount is greater than sender's account balance
      */
-    public Future<Transaction> transferMoney(SQLConnection sqlConnection, Account sender, Account receiver, BigDecimal amount) {
+    private Future<Transaction> transferMoney(Account sender, Account receiver, BigDecimal amount, SQLConnection sqlConnection) {
         Future<Transaction> future = Future.future();
 
-        LOGGER.error("Transferring: ".concat(amount.toString()));
-        LOGGER.error("From: ".concat(sender.toString()));
-        LOGGER.error("To: ".concat(receiver.toString()));
+        LOGGER.info("Transferring: ".concat(amount.toString()));
+        LOGGER.info("From: ".concat(sender.toString()));
+        LOGGER.info("To: ".concat(receiver.toString()));
 
         BigDecimal senderBalance = sender.getBalance();
         if (senderBalance.compareTo(amount) < 0) {
-            LOGGER.error("Sender: ".concat(sender.toString()).concat(" is bankrupt!"));
-            future.fail(new IllegalStateException("Sender: ".concat(sender.toString()).concat(" is bankrupt!")));
+            LOGGER.warn("Sender: ".concat(sender.toString()).concat(" does not have enough money!"));
+            future.fail(new IllegalStateException("Could not transfer money!"));
         } else {
-            JsonArray params = new JsonArray()
+            JsonArray createNewTransactionParams = new JsonArray()
                     .add(UUID.randomUUID().toString())
                     .add(sender.getId().toString())
                     .add(receiver.getId().toString())
                     .add(amount.doubleValue());
-            sqlConnection.updateWithParams("INSERT INTO transaction VALUES(?, ?, ?, ?)", params, ar -> {
+            sqlConnection.updateWithParams("INSERT INTO transaction VALUES(?, ?, ?, ?)", createNewTransactionParams, ar -> {
                 sender.setBalance(senderBalance.subtract(amount));
                 JsonArray params2 = new JsonArray().add(sender.getBalance().doubleValue()).add(sender.getId().toString());
                 sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", params2, event ->  {

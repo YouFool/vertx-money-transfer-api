@@ -140,7 +140,7 @@ public class MoneyTransferVerticle extends AbstractVerticle {
                                 this.transferMoney(sqlConnection, fromAccount, toAccount, theTransaction.getAmount())
                                         .setHandler(event -> {
                                             if (event.failed()) {
-                                                transactionFuture.fail("Could not transfer money!");
+                                                transactionFuture.fail(new IllegalStateException("Could not transfer money!"));
                                             }
                                             transactionFuture.complete();
                                         });

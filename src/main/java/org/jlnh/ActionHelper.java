@@ -1,8 +1,10 @@
 package org.jlnh;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.Handler;
 import io.vertx.core.json.Json;
+import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.RoutingContext;
 import org.jlnh.model.Transaction;
 
@@ -61,14 +63,24 @@ public class ActionHelper {
     public static Handler<AsyncResult<Transaction>> handleTransfer(RoutingContext routingContext, Transaction transaction) {
         return ar -> {
             if (ar.failed()) {
+                JsonObject failureJson = new JsonObject() //
+                        .put("error", ar.cause().getMessage()); //
                 if (ar.cause() instanceof IllegalStateException) {
-                    routingContext.response().setStatusCode(404).end("Could not transfer: user does not have sufficient funds");
+                    failureJson.put("cause", "User does not have sufficient funds").put("code", 400);
+                    routingContext.response() //
+                            .setStatusCode(400) //
+                            .end(Json.encodePrettily(failureJson));
                 } else {
                     routingContext.fail(ar.cause());
                 }
+            } else {
+                transaction.setTo(null); // Who transferred the money does not need to know his friend's balance
+                Json.prettyMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+                routingContext.response() //
+                        .setStatusCode(201) //
+                        .putHeader("content-type", "application/json; charset=utf-8") //
+                        .end(Json.encodePrettily(transaction)); //TODO should encode ar.result()
             }
-            transaction.setTo(null); // who transferred the money does not need to know his friend's balance
-            routingContext.response().setStatusCode(201).end(Json.encodePrettily(transaction));
         };
     }
 }

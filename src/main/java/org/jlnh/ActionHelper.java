@@ -67,7 +67,7 @@ public class ActionHelper {
                     routingContext.fail(ar.cause());
                 }
             }
-            transaction.setTo(null); // who transferred the money does not need to know his friend balance
+            transaction.setTo(null); // who transferred the money does not need to know his friend's balance
             routingContext.response().setStatusCode(201).end(Json.encodePrettily(transaction));
         };
     }

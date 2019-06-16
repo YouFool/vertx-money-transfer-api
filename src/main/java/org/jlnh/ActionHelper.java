@@ -69,6 +69,7 @@ public class ActionHelper {
                     failureJson.put("cause", "User does not have sufficient funds").put("code", 400);
                     routingContext.response() //
                             .setStatusCode(400) //
+                            .putHeader("content-type", "application/json; charset=utf-8") //
                             .end(Json.encodePrettily(failureJson));
                 } else {
                     routingContext.fail(ar.cause());

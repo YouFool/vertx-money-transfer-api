@@ -7,7 +7,10 @@ import io.vertx.ext.unit.junit.VertxUnitRunner;
 import org.jlnh.MoneyTransferVerticle;
 import org.jlnh.model.Account;
 import org.jlnh.model.Transaction;
-import org.junit.*;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import java.math.BigDecimal;
@@ -39,7 +42,7 @@ public class MoneyTransferVerticleTest {
     private void initializeSampleTransaction() {
         Account account1 = new Account(UUID.fromString("f4e05ee5-12eb-4ae0-92c7-2cb4b6cd8ce2"), BigDecimal.valueOf(9.99));
         Account account2 = new Account(UUID.fromString("123e4567-e89b-12d3-a456-556642440000"), BigDecimal.valueOf(0));
-        this.sampleTransaction = new Transaction(null, account1, account2, BigDecimal.valueOf(5));
+        this.sampleTransaction = new Transaction(null, account1, account2, BigDecimal.valueOf(0.01));
     }
 
     @After
@@ -73,10 +76,12 @@ public class MoneyTransferVerticleTest {
     }
 
     @Test
-    public void should_transfer_money(TestContext context) {
+    public void should_transfer_money_1000(TestContext context) {
         Async async = context.async();
 
-        final String json = Json.encodePrettily(sampleTransaction);
+        Transaction transaction = sampleTransaction;
+        final String json = Json.encodePrettily(transaction);
+
         vertx.createHttpClient().post(port, "localhost", "/api/transfer") //
                 .putHeader("Content-Type", "application/json") //
                 .putHeader("Content-Length", Integer.toString(json.length())) //
@@ -84,10 +89,10 @@ public class MoneyTransferVerticleTest {
                     context.assertEquals(response.statusCode(), 201);
                     context.assertTrue(response.headers().get("content-type").contains("application/json"));
                     response.bodyHandler(body -> {
-                        Transaction transaction = Json.decodeValue(body.toString(), Transaction.class);
-                        context.assertEquals(transaction.getAmount(), BigDecimal.valueOf(5));
+                        Transaction responseTransaction = Json.decodeValue(body.toString(), Transaction.class);
+                        context.assertEquals(responseTransaction.getAmount(), BigDecimal.valueOf(0.01));
 //                        context.assertEquals(transaction.getFrom().getBalance(), BigDecimal.valueOf(4.99)); TODO fix using the transaction obj
-                        context.assertNull(transaction.getTo());
+                        context.assertNull(responseTransaction.getTo());
                         async.complete();
                     });
                 })
@@ -96,7 +101,6 @@ public class MoneyTransferVerticleTest {
     }
 
     @Test
-    @Ignore
     public void should_not_transfer_money_not_enough_funds(TestContext context) {
         Async async = context.async();
 
@@ -111,7 +115,7 @@ public class MoneyTransferVerticleTest {
                     context.assertEquals(response.statusCode(), 400);
                     context.assertTrue(response.headers().get("content-type").contains("application/json"));
                     response.bodyHandler(body -> {
-                        context.assertTrue(body.toString().contains("Could not transfer"));
+                        context.assertTrue(body.toString().contains("Could not transfer money!"));
                         async.complete();
                     });
                 })

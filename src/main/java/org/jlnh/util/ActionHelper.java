@@ -49,15 +49,14 @@ public class ActionHelper {
      * Returns a handler to the transfer async result.
      *
      * @param context the routing context
-     * @param transaction the transaction
      * @return the handler
      */
-    public static Handler<AsyncResult<Transaction>> handleTransfer(RoutingContext context, Transaction transaction) {
-        return ar -> {
-            if (ar.failed()) {
+    public static Handler<AsyncResult<Transaction>> handleTransfer(RoutingContext context) {
+        return asyncResult -> {
+            if (asyncResult.failed()) {
                 JsonObject failureJson = new JsonObject() //
-                        .put("error", ar.cause().getMessage()); //
-                if (ar.cause() instanceof IllegalStateException) {
+                        .put("error", asyncResult.cause().getMessage()); //
+                if (asyncResult.cause() instanceof IllegalStateException) {
                     failureJson.put("cause", "User does not have sufficient funds")
                             .put("code", 400);
                     context.response() //
@@ -65,15 +64,16 @@ public class ActionHelper {
                             .putHeader(CONTENT_TYPE, APPLICATION_JSON_CHARSET_UTF_8) //
                             .end(Json.encodePrettily(failureJson));
                 } else {
-                    context.fail(ar.cause());
+                    context.fail(asyncResult.cause());
                 }
             } else {
-                transaction.setTo(null); // Who transferred the money does not need to know his friend's balance
+                Transaction transactionDone = asyncResult.result();
+                transactionDone.setTo(null); // Who transferred the money does not need to know his friend's balance, right?
                 Json.prettyMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
                 context.response() //
                         .setStatusCode(201) //
                         .putHeader(CONTENT_TYPE, APPLICATION_JSON_CHARSET_UTF_8) //
-                        .end(Json.encodePrettily(transaction)); //TODO should encode ar.result()
+                        .end(Json.encodePrettily(transactionDone));
             }
         };
     }

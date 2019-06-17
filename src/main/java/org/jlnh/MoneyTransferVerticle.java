@@ -119,12 +119,12 @@ public class MoneyTransferVerticle extends AbstractVerticle {
      * @param routingContext request context
      */
     private void transfer(RoutingContext routingContext) {
-        Transaction theTransaction = routingContext.getBodyAsJson().mapTo(Transaction.class);
-        LOGGER.info("Transaction incoming: ".concat(theTransaction.toString()));
+        Transaction incomingTransaction = routingContext.getBodyAsJson().mapTo(Transaction.class);
+        LOGGER.info("Transaction incoming: ".concat(incomingTransaction.toString()));
 
         connect() //
-                .compose(sqlConnection -> this.doTransfer(sqlConnection, theTransaction))
-                .setHandler(handleTransfer(routingContext, theTransaction));
+                .compose(sqlConnection -> this.doTransfer(sqlConnection, incomingTransaction))
+                .setHandler(handleTransfer(routingContext));
     }
 
     /**
@@ -247,8 +247,10 @@ public class MoneyTransferVerticle extends AbstractVerticle {
             LOGGER.warn("Sender: ".concat(sender.toString()).concat(" does not have enough money!"));
             future.fail(new IllegalStateException("Could not transfer money!"));
         } else {
+            UUID transactionUuid = UUID.randomUUID();
+            Transaction transaction = new Transaction(transactionUuid, sender, receiver, amount);
             JsonArray createNewTransactionParams = new JsonArray()
-                    .add(UUID.randomUUID().toString())
+                    .add(transactionUuid.toString())
                     .add(sender.getId().toString())
                     .add(receiver.getId().toString())
                     .add(amount.doubleValue());
@@ -262,7 +264,7 @@ public class MoneyTransferVerticle extends AbstractVerticle {
                     sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", params3, AsyncResult::mapEmpty);
                 });
             });
-            future.complete();
+            future.complete(transaction);
         }
         return future;
     }

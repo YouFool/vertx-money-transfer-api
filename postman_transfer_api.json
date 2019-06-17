@@ -1,0 +1,80 @@
+{
+	"info": {
+		"_postman_id": "cdad6698-cda5-465f-9c7a-0a97ce706d19",
+		"name": "TransferAPI",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Transfer money",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"from\" : {\r\n    \"id\" : \"e6908ec0-1b70-4982-9362-8e9bdabbbd97\",\r\n    \"balance\" : 10000\r\n  },\r\n  \"to\" : {\r\n    \"id\" : \"123e4567-e89b-12d3-a456-556642440000\",\r\n    \"balance\" : 0\r\n  },\r\n  \"amount\" : 5000\r\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/transfer",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"transfer"
+					]
+				},
+				"description": "transfer money"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Accounts",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Accept",
+						"value": "application/json",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"name": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "http://localhost:8080/api/accounts/",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"accounts",
+						""
+					]
+				},
+				"description": "transfer money"
+			},
+			"response": []
+		}
+	]
+}

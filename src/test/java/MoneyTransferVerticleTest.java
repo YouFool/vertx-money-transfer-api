@@ -76,7 +76,7 @@ public class MoneyTransferVerticleTest {
     }
 
     @Test
-    public void should_transfer_money_1000(TestContext context) {
+    public void should_transfer_money(TestContext context) {
         Async async = context.async();
 
         Transaction transaction = sampleTransaction;

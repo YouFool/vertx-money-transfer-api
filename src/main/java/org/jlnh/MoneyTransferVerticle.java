@@ -2,7 +2,6 @@ package org.jlnh;
 
 import io.vertx.config.ConfigRetriever;
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.AsyncResult;
 import io.vertx.core.Future;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
@@ -22,8 +21,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static org.jlnh.util.ActionHelper.handleTransfer;
-import static org.jlnh.util.ActionHelper.ok;
+import static org.jlnh.util.ActionHelper.*;
 
 /**
  * Verticle responsible for the money transfer API.
@@ -139,23 +137,23 @@ public class MoneyTransferVerticle extends AbstractVerticle {
 
         this.findAccount(theTransaction.getFrom().getId().toString(), sqlConnection, false)
                 .compose(fromAccount -> {
-                    Future<Account> toAccountFuture = Future.future();
-
+                    Future<Account> fromAccountFuture = Future.future();
                     this.findAccount(theTransaction.getTo().getId().toString(), sqlConnection, false)
                             .compose(toAccount -> {
+                                Future<Account> toAccountFuture = Future.future();
+
                                 this.transferMoney(fromAccount, toAccount, theTransaction.getAmount(), sqlConnection)
-                                        .setHandler(event -> {
-                                            if (event.failed()) {
-                                                transactionFuture.fail(event.cause());
+                                        .setHandler(transferResult -> {
+                                            if (transferResult.failed()) {
+                                                transactionFuture.fail(transferResult.cause());
                                             } else {
-                                                transactionFuture.complete(event.result());
+                                                transactionFuture.complete(transferResult.result());
                                             }
                                         });
-                            return transactionFuture;
+                                return toAccountFuture;
                             });
-                    return toAccountFuture.mapEmpty();
+                    return fromAccountFuture;
                 });
-
         return transactionFuture;
     }
 
@@ -245,26 +243,33 @@ public class MoneyTransferVerticle extends AbstractVerticle {
         BigDecimal senderBalance = sender.getBalance();
         if (senderBalance.compareTo(amount) < 0) {
             LOGGER.warn("Sender: ".concat(sender.toString()).concat(" does not have enough money!"));
-            future.fail(new IllegalStateException("Could not transfer money!"));
+            future.fail(new IllegalStateException(COULD_NOT_TRANSFER_MONEY));
         } else {
             UUID transactionUuid = UUID.randomUUID();
             Transaction transaction = new Transaction(transactionUuid, sender, receiver, amount);
+
             JsonArray createNewTransactionParams = new JsonArray()
                     .add(transactionUuid.toString())
                     .add(sender.getId().toString())
                     .add(receiver.getId().toString())
                     .add(amount.doubleValue());
-            sqlConnection.updateWithParams("INSERT INTO transaction VALUES(?, ?, ?, ?)", createNewTransactionParams, ar -> {
+            sqlConnection.updateWithParams("INSERT INTO transaction VALUES(?, ?, ?, ?)", createNewTransactionParams, createTransactionResult -> {
+
                 sender.setBalance(senderBalance.subtract(amount));
-                JsonArray params2 = new JsonArray().add(sender.getBalance().doubleValue()).add(sender.getId().toString());
-                sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", params2, event ->  {
+                JsonArray senderUpdateParams = new JsonArray().add(sender.getBalance().doubleValue()).add(sender.getId().toString());
+                sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", senderUpdateParams, updateSender ->  {
 
                     receiver.setBalance(receiver.getBalance().add(amount));
-                    JsonArray params3 = new JsonArray().add(receiver.getBalance().doubleValue()).add(receiver.getId().toString());
-                    sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", params3, AsyncResult::mapEmpty);
+                    JsonArray receiverUpdateParams = new JsonArray().add(receiver.getBalance().doubleValue()).add(receiver.getId().toString());
+                    sqlConnection.updateWithParams("UPDATE account SET balance = ? WHERE id = ?", receiverUpdateParams, updateReceiver -> {
+                        if (updateReceiver.failed()) {
+                            future.fail(COULD_NOT_TRANSFER_MONEY);
+                        } else {
+                            future.complete(transaction);
+                        }
+                    });
                 });
             });
-            future.complete(transaction);
         }
         return future;
     }

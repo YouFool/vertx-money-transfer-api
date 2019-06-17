@@ -17,6 +17,7 @@ public class ActionHelper {
 
     private static final String APPLICATION_JSON_CHARSET_UTF_8 = "application/json; charset=utf-8";
     private static final String CONTENT_TYPE = "content-type";
+    public static final String COULD_NOT_TRANSFER_MONEY = "Could not transfer money!";
 
     private ActionHelper() {
     }

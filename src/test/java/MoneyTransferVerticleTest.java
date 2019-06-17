@@ -91,7 +91,7 @@ public class MoneyTransferVerticleTest {
                     response.bodyHandler(body -> {
                         Transaction responseTransaction = Json.decodeValue(body.toString(), Transaction.class);
                         context.assertEquals(responseTransaction.getAmount(), BigDecimal.valueOf(0.01));
-//                        context.assertEquals(transaction.getFrom().getBalance(), BigDecimal.valueOf(4.99)); TODO fix using the transaction obj
+                        context.assertEquals(responseTransaction.getFrom().getBalance(), BigDecimal.valueOf(9.98));
                         context.assertNull(responseTransaction.getTo());
                         async.complete();
                     });

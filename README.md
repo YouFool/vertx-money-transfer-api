@@ -43,7 +43,7 @@ pre-installed container/server).
 4. The HTTP server will be served at `localhost:8080` by default. (You can change the port in the `config.json` file).
 5. Open your REST client and let's call the API's! (You can import this project postman collection too)
 
-
+```
     Represents an account
     entity account : {
          id : uuid?
@@ -64,5 +64,6 @@ pre-installed container/server).
     POST /api/transfer ->
         input : transaction
         output : transaction
+```
 
 ---

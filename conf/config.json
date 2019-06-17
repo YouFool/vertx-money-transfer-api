@@ -3,5 +3,6 @@
   "url": "jdbc:h2:mem:test",
   "driver_class": "org.h2.Driver",
   "user": "sa",
-  "password": "sa"
+  "password": "sa",
+  "castUUID" : true
 }

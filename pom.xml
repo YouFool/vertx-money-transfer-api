@@ -12,7 +12,7 @@
         <vertx.verticle>org.jlnh.MoneyTransferVerticle</vertx.verticle>
         <vertx.version>3.7.1</vertx.version>
         <vertx-maven-plugin.version>1.0.13</vertx-maven-plugin.version>
-        <h2.version>1.4.199</h2.version>
+        <h2.version>2.0.206</h2.version>
         <log4j.version>2.11.2</log4j.version>
     </properties>
 
